@@ -52,7 +52,7 @@
 // agent
 #define AGENT_MAX_SESSION_ID   0xFFFEu  // 0xFFFEu = 65534
 
-#define BTCCOM_MINER_AGENT_PREFIX "btccom-agent/"
+#define NANO_MINER_AGENT_PREFIX "nano-agent/"
 
 // invalid share sliding window size
 #define INVALID_SHARE_SLIDING_WINDOWS_SIZE       60  // unit: seconds
@@ -139,24 +139,24 @@ public:
 
   // shares submitted by this session, for duplicate share check
   struct LocalShare {
-    uint64_t exNonce2_;  // extra nonce2 fixed 8 bytes
-    uint256  nonce_;     // nonce in block header
     uint32_t time_;      // nTime in block header
+    uint256  nonce_;     // nonce in block header
+    std::vector<unsigned char> solution_; // nSolution in block header    
 
-    LocalShare(uint64_t exNonce2, uint256 nonce, uint32_t time):
-    exNonce2_(exNonce2), nonce_(nonce), time_(time) {}
+    LocalShare(uint32_t time, uint256 nonce, std::vector<unsigned char> solution):
+    time_(time), nonce_(nonce), solution_(solution){}
 
     LocalShare & operator=(const LocalShare &other) {
-      exNonce2_ = other.exNonce2_;
-      nonce_    = other.nonce_;
       time_     = other.time_;
+      nonce_    = other.nonce_;
+      solution_ = other.solution_;
       return *this;
     }
 
     bool operator<(const LocalShare &r) const {
-      if (exNonce2_ < r.exNonce2_ ||
-          (exNonce2_ == r.exNonce2_ && nonce_ < r.nonce_) ||
-          (exNonce2_ == r.exNonce2_ && nonce_ == r.nonce_ && time_ < r.time_)) {
+      if (time_ < r.time_ ||
+          (time_ == r.time_ && nonce_ < r.nonce_) ||
+          (time_ == r.time_ && nonce_ == r.nonce_ && solution_ < r.solution_)) {
         return true;
       }
       return false;
@@ -174,13 +174,16 @@ public:
 
     LocalJob(): jobId_(0), jobDifficulty_(0), blkBits_(0), shortJobId_(0) {}
 
-    bool addLocalShare(const LocalShare &localShare) {
+    bool findLocalShare(const LocalShare &localShare) {
       auto itr = submitShares_.find(localShare);
       if (itr != submitShares_.end()) {
         return false;  // already exist
       }
-      submitShares_.insert(localShare);
       return true;
+    }
+
+    void addLocalShare(const LocalShare &localShare) {
+      submitShares_.insert(localShare); 
     }
   };
 
@@ -280,7 +283,7 @@ public:
                             bool isAgentSession,
                             DiffController *sessionDiffController);
   uint32_t getSessionId() const;
-  void sendSetTarget(uint256 &target);
+  void sendSetTarget(const uint256& target);
 };
 
 

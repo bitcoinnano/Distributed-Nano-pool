@@ -135,10 +135,12 @@ class UserInfo {
     int64_t workerId_;
     char    workerName_[21];
     char    minerAgent_[31];
+    char    username_[35]; 
 
     WorkerName(): userId_(0), workerId_(0) {
       memset(workerName_, 0, sizeof(workerName_));
       memset(minerAgent_, 0, sizeof(minerAgent_));
+      memset(username_, 0, sizeof(username_)); 
     }
   };
 
@@ -146,7 +148,7 @@ class UserInfo {
   pthread_rwlock_t rwlock_;
   atomic<bool> running_;
   string apiUrl_;
-
+  
   // username -> userId
   std::unordered_map<string, int32_t> nameIds_;
   int32_t lastMaxUserId_;
@@ -173,7 +175,7 @@ public:
 
   int32_t getUserId(const string userName);
   void addWorker(const int32_t userId, const int64_t workerId,
-                 const string &workerName, const string &minerAgent);
+                 const string &workerName, const string &minerAgent, const string &userName);
 };
 
 

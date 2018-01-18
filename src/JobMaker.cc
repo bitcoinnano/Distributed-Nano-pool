@@ -352,7 +352,7 @@ void JobMaker::clearTimeoutGbt() {
     } else {
       // remove expired gbt
       LOG(INFO) << "remove timeout rawgbt: " << date("%F %T", ts) << "|" << ts <<
-      ", height:" << height << ", isEmptyBlock:" << (isEmpty ? 1 : 0);
+      ", height:" << height << ", isEmptyBlock:" << (isEmpty ? 1 : 0) << itr->second;
 
       // c++11: returns an iterator to the next element in the map
       itr = rawgbtMap_.erase(itr);

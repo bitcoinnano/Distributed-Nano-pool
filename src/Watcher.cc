@@ -583,7 +583,7 @@ void PoolWatchClient::handleStratumMessage(const string &line) {
     std::vector<JsonNode> resArr = jresult.array();
     if (resArr.size() < 3) {
       LOG(ERROR) << "<" << poolName_ << "> result element's number is less than 3: " << line;
-      return;
+    //  return;
     }
 
     extraNonce1_     = resArr[1].uint32_hex();

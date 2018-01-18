@@ -356,12 +356,18 @@ bool StratumJob::initFromGbt(const char *gbt, const string &poolCoinbaseInfo,
   // we need to convert to little-endian
   // 00000000000000000328e9fea9914ad83b7404a838aa66aefb970e5689c2f63d
   // 89c2f63dfb970e5638aa66ae3b7404a8a9914ad80328e9fe0000000000000000
+  /* i don't konw why need to convert to little-endian, maybe duo to it's bitcoin */
+  /* however, we mine nano here now, deal later even though need convert */
+  /*
   for (int i = 0; i < 8; i++) {
     uint32 a = *(uint32 *)(BEGIN(prevHash_) + i * 4);
     a = HToBe(a);
     prevHashBeStr_ += HexStr(BEGIN(a), END(a));
   }
-
+  */
+  /*just only recieve the string*/
+  prevHashBeStr_ = Strings::Format("%s",prevHash_.ToString().c_str());
+  
   // merkle branch, merkleBranch_ could be empty
   {
     // read txs hash/data

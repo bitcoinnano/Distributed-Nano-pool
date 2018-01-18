@@ -452,7 +452,7 @@ bool UserInfo::setupThreads() {
 }
 
 void UserInfo::addWorker(const int32_t userId, const int64_t workerId,
-                         const string &workerName, const string &minerAgent) {
+                         const string &workerName, const string &minerAgent, const string &userName) {
   ScopeLock sl(workerNameLock_);
 
   // insert to Q
@@ -468,6 +468,10 @@ void UserInfo::addWorker(const int32_t userId, const int64_t workerId,
   snprintf(workerNameQ_.rbegin()->minerAgent_,
            sizeof(workerNameQ_.rbegin()->minerAgent_),
            "%s", minerAgent.c_str());
+  // user name(wallet address)
+  snprintf(workerNameQ_.rbegin()->userName_,
+           sizeof(workerNameQ_.rbegin()->userName_),
+           "%s", userName.c_str());
 }
 
 void UserInfo::runThreadInsertWorkerName() {
@@ -553,67 +557,48 @@ void StratumJobEx::makeMiningNotifyStr() {
       merkleBranchStr.resize(merkleBranchStr.length() - 1);  // remove last ','
     }
   }
-
-  // we don't put jobId here, session will fill with the shortJobId
-  miningNotify1_ = "{\"id\":0,\"method\":\"mining.notify\",\"params\":[\"";
-
-  miningNotify2_ = Strings::Format("\",\"%s\",\"%s\",\"%s\""
-                                   ",[%s]"
-                                   ",\"%08x\",\"%08x\",\"%08x\",%s"
-                                   "]}\n",
-                                   sjob_->prevHashBeStr_.c_str(),
-                                   sjob_->coinbase1_.c_str(), sjob_->coinbase2_.c_str(),
-                                   merkleBranchStr.c_str(),
-                                   sjob_->nVersion_, sjob_->nBits_, sjob_->nTime_,
-                                   isClean_ ? "true" : "false");
-
-  // always set clean to true, reset of them is the same with miningNotify2_
-  miningNotify2Clean_ = Strings::Format("\",\"%s\",\"%s\",\"%s\""
-                                   ",[%s]"
-                                   ",\"%08x\",\"%08x\",\"%08x\",true"
-                                   "]}\n",
-                                   sjob_->prevHashBeStr_.c_str(),
-                                   sjob_->coinbase1_.c_str(), sjob_->coinbase2_.c_str(),
-                                   merkleBranchStr.c_str(),
-                                   sjob_->nVersion_, sjob_->nBits_, sjob_->nTime_);
+  miningNotify1_ = "{\"id\":null,\"method\":\"mining.notify\",\"params\":[\"";
   /* the miningNotify customized for nano-miner */
   /* string jobIdStr = Strings::Format("%016x",sjob_->jobId_); */
   std::string jobIdStr = std::to_string(sjob_->jobId_);
 
+  std::string tmp_nVersion_ = Strings::Format("%08x", sjob_->nVersion_);
   std::string tmp_hashMerkleRoot_ = sjob_->hashMerkleRoot_.ToString();
   std::string tmp_prevHashBeStr_ = sjob_->prevHashBeStr_;
   uint32_t tmp_nTime_ = sjob_->nTime_;
   uint32_t tmp_nBits_ = sjob_->nBits_;
-  uint32_t tmp_nVersion_ = sjob_->nVersion_;
+  
+  reverseStr(tmp_nVersion_);
+  DLOG(INFO) << "tmp_nVersion_ after reverse: " << tmp_nVersion_;
   reverseStr(tmp_hashMerkleRoot_);
   reverseStr(tmp_prevHashBeStr_);
-  reversePrevExtra(tmp_prevHashBeStr_);
+  // reversePrevExtra(tmp_prevHashBeStr_);
   reverseU32(tmp_nTime_);
   reverseU32(tmp_nBits_);
-  reverseU32(tmp_nVersion_);
-
-  miningNotify2Nano_ = Strings::Format("%s\",\"%08x\",\"%s\",\"%s\",\"%s\""
+  /* tmp_nVersion_ = 0x544a0200;*/ /* 0x00024a54  150100*/
+  
+  miningNotify2Nano_ = Strings::Format("%s\",\"%s\",\"%s\",\"%s\",\"%s\""
                                         ",\"%08x\",\"%08x\",%s"
                                         "]}\n",
                                         jobIdStr.c_str(),
-                                        tmp_nVersion_,
+                                        tmp_nVersion_.c_str(),
                                         tmp_prevHashBeStr_.c_str(),
                                         tmp_hashMerkleRoot_.c_str(),                                        
                                         sjob_->hashReserved_.ToString().c_str(),
                                         tmp_nTime_,
                                         tmp_nBits_,
-                                        isClean_ ? "ture" : "false");
+                                        isClean_ ? "true" : "false");
  
-  miningNotify2NanoClean_ = Strings::Format("%s\",\"%08x\",\"%s\",\"%s\",\"%s\""
-                                        ",\"%08x\",\"%08x\",true"
-                                        "]}\n",
-                                        jobIdStr.c_str(),
-                                        tmp_nVersion_,
-                                        tmp_prevHashBeStr_.c_str(),
-                                        tmp_hashMerkleRoot_.c_str(),
-                                        sjob_->hashReserved_.ToString().c_str(),
-                                        tmp_nTime_,
-                                        tmp_nBits_ );  
+  miningNotify2NanoClean_ = Strings::Format("%s\",\"%s\",\"%s\",\"%s\",\"%s\""
+                                            ",\"%08x\",\"%08x\",true"
+                                            "]}\n",
+                                            jobIdStr.c_str(),
+                                            tmp_nVersion_.c_str(),
+                                            tmp_prevHashBeStr_.c_str(),
+                                            tmp_hashMerkleRoot_.c_str(),
+                                            sjob_->hashReserved_.ToString().c_str(),
+                                            tmp_nTime_,
+                                            tmp_nBits_ );  
 }
 
 void StratumJobEx::markStale() {
@@ -649,13 +634,13 @@ void StratumJobEx::generateBlockHeader(CBlockHeader *header,
                                        const std::vector<unsigned char> &nSolution){
   generateCoinbaseTx(coinbaseBin, 0, "");
 
-  header->hashPrevBlock = hashPrevBlock;
+  header->hashPrevBlock  = hashPrevBlock;
   header->hashMerkleRoot = hashMerkleRoot;
   header->hashReserved   = hashReserved;
-  header->nVersion      = nVersion;
-  header->nBits         = nBits;
-  header->nTime         = nTime;
-  header->nNonce        = nonce;
+  header->nVersion       = nVersion;
+  header->nBits          = nBits;
+  header->nTime          = nTime;
+  header->nNonce         = nonce;
   header->nSolution      = nSolution;
 
   /* make hashMerkleRoot to compare */
@@ -1052,10 +1037,10 @@ int Server::checkShare(const Share &share,
   if (nTime <= sjob->minTime_) {
     return StratumError::TIME_TOO_OLD;
   }
-  if (nTime > sjob->nTime_ + 600) {
+  if (nTime > sjob->nTime_ + 600) { 
     return StratumError::TIME_TOO_NEW;
   }
-
+  DLOG(INFO) << "std::to_string(sjob->nVersion_): " << std::to_string(sjob->nVersion_);
   CBlockHeader header;
   std::vector<char> coinbaseBin;
   exJobPtr->generateBlockHeader(&header, &coinbaseBin,
@@ -1069,10 +1054,23 @@ int Server::checkShare(const Share &share,
                                 nSolution);
 
   uint256 blkHash = header.GetHash();
-
+	
+  DLOG(INFO) << "nonce to be used for make header: " << nonce.ToString();
+  DLOG(INFO) << "version:  " << std::to_string(sjob->nVersion_);
+  DLOG(INFO) << "prevHash: " << sjob->prevHash_.ToString();
+  DLOG(INFO) << "merkleRo: " << sjob->hashMerkleRoot_.ToString();
+  DLOG(INFO) << "reserved: " << sjob->hashReserved_.ToString();
+  DLOG(INFO) << "nTime:    " << std::to_string(nTime);
+  DLOG(INFO) << "nBits:    " << std::to_string(sjob->nBits_);
+  DLOG(INFO) << "blkHash.ToString()= " << blkHash.ToString();
+  /*
+  uint8_t nSolutionBuffer[1344] = {0};
+  for( int i=0; i<1344; ++i){
+    nSolutionBuffer[i] = nSolution[i];
+  }
+  */
   arith_uint256 bnBlockHash     = UintToArith256(blkHash);
   arith_uint256 bnNetworkTarget = UintToArith256(sjob->networkTarget_);
-
   //
   // found new block
   //
@@ -1085,7 +1083,14 @@ int Server::checkShare(const Share &share,
     foundBlock.workerId_ = share.workerHashId_;
     foundBlock.userId_   = share.userId_;
     foundBlock.height_   = sjob->height_;
-    memcpy(foundBlock.header140_, (const uint8_t *)&header, sizeof(CBlockHeader));
+
+    memcpy(foundBlock.header1484_, (const uint8_t *)&header, 140);
+    for(int i=0; i<nSolution.size(); ++i)
+    {
+		  foundBlock.header1484_[140+i] = nSolution[i];
+    }
+    /* memcpy(foundBlock.header1484_+140, (uint8_t*)nSolutionBuffer, 1344); */
+
     snprintf(foundBlock.workerFullName_, sizeof(foundBlock.workerFullName_),
              "%s", workFullName.c_str());
     // send
@@ -1149,6 +1154,8 @@ int Server::checkShare(const Share &share,
 
   // check share diff
   if (isEnableSimulator_ == false && bnBlockHash >= UintToArith256(jobTarget)) {
+    DLOG(INFO) << bnBlockHash.ToString();
+    DLOG(INFO) << jobTarget.ToString();
     return StratumError::LOW_DIFFICULTY;
   }
 
@@ -1178,7 +1185,7 @@ void Server::sendSolvedShare2Kafka(const FoundBlock *foundBlock,
 
   // coinbase TX
   memcpy(p, coinbaseBin.data(), coinbaseBin.size());
-  if(coinbaseBin.size()==0){DLOG(ERROR)<<"coinbaseBin.size()==0";}
+
   kafkaProducerSolvedShare_->produce(buf.data(), buf.size());
 }
 
