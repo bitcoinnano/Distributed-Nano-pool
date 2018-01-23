@@ -661,8 +661,8 @@ StratumServer::StratumServer(const char *ip, const unsigned short port,
                              const char *kafkaBrokers, const string &userAPIUrl,
                              const uint8_t serverId, const string &fileLastNotifyTime,
                              bool isEnableSimulator, bool isSubmitInvalidBlock,
-                             const int32_t shareAvgSeconds)
-:running_(true), server_(shareAvgSeconds),
+                             const int32_t shareAvgSeconds, const MysqlConnectInfo &poolDB)
+:running_(true), server_(shareAvgSeconds, poolDB),
 ip_(ip), port_(port), serverId_(serverId),
 fileLastNotifyTime_(fileLastNotifyTime),
 kafkaBrokers_(kafkaBrokers), userAPIUrl_(userAPIUrl),
@@ -697,13 +697,14 @@ void StratumServer::run() {
 }
 
 ///////////////////////////////////// Server ///////////////////////////////////
-Server::Server(const int32_t shareAvgSeconds):
+Server::Server(const int32_t shareAvgSeconds, const MysqlConnectInfo &poolDB):
 base_(nullptr), signal_event_(nullptr), listener_(nullptr),
 kafkaProducerShareLog_(nullptr),
 kafkaProducerSolvedShare_(nullptr),
 kafkaProducerNamecoinSolvedShare_(nullptr),
 kafkaProducerCommonEvents_(nullptr),
 isEnableSimulator_(false), isSubmitInvalidBlock_(false),
+poolDB_(poolDB),
 
 #ifndef WORK_WITH_STRATUM_SWITCHER
 sessionIDManager_(nullptr),
@@ -934,6 +935,119 @@ void Server::sendMiningNotifyToAll(shared_ptr<StratumJobEx> exJobPtr) {
   }
 }
 
+void Server::updateAccounts(){
+    // use thread to keep accounts
+    boost::thread t(boost::bind(&Server::doAccounts, this));
+}
+
+void Server::doAccounts(){
+  ScopeLock sl(connsLock_);
+  uint64_t totleShares;
+  std::map<const std::string, uint64_t> accounts;
+  std::map<evutil_socket_t, StratumSession *>::iterator itr = connections_.begin();
+  while (itr != connections_.end()) {
+    StratumSession *conn = itr->second;  // alias
+
+    if (conn->isDead()) {
+#ifndef WORK_WITH_STRATUM_SWITCHER
+      sessionIDManager_->freeSessionId(conn->getSessionId());
+#endif
+
+      delete conn;
+      itr = connections_.erase(itr);
+    } else {
+      totleShares += conn->localJobs_->submitShares_.size();
+      keepAccounts(conn->worker_->userName_,);
+      ++itr;
+    }
+  }
+}
+
+void Server::keepAccounts(const std::string& userId, const uint64_t& wage){
+  ScopeLock sl(connsLock_);
+  if(payOutQueue_){
+    for(auto itr = payOutQueue_.begin(), itr != payOutQueue_.end(); ++itr){
+      if(itr->userId_ == userId){
+        itr->wage_ += wage;
+        return;
+      }
+    }
+  }
+  payOutQueue_.push_back(payoutElement(userId, wage)); 
+}
+
+void Server::updateBills(const std::string& userId, const uint64_t& wage, bool isKeepAccount){
+  const string nowStr = date("%F %T");
+  string sql_query;
+  // string sql_insert;
+  string sql_update;
+  char **row = nullptr;
+  MySQLResult res;
+  uint64_t db_paid = 0;
+  uint64_t db_owed = 0;
+
+  // try connect to DB
+  MySQLConnection db(poolDB_);
+  for (size_t i = 0; i < 3; i++) {
+    if (db.ping())
+      break;
+    else
+      sleep(3);
+  }
+
+  sql_query = Strings::Format("SELECT `paid` `owed` FROM `bills` WHERE `puid`=\"%s\"", userId.c_str());
+  if (db.query(sql_query, res) == false) {
+    LOG(ERROR) << "query bills failure: " << sql_query;
+    return;
+  }
+  if (row = res.nextRow() != 0) {
+    db_paid = strtoull(row[0], nullptr, 10);
+    db_owed = strtoull(row[1], nullptr, 10);
+    // assert(owed == wage);
+    if(isKeepAccount){
+      db_owed += wage;
+    }else {
+      db_paid += wage;
+      db_owed = 0;      
+    }
+  }
+  // paid += wage;
+  sql_update = Strings::Format("UPDATE `bills` SET `last_pay_time`=\"%s\",`paid`=\"%d\",`owed`=\"%d\",`updated_at`=\"%s\""
+                                "WHERE `puid`=\"%s\"",nowStr.c_str(), db_paid, db_owed, nowStr.c_str(), userId.c_str());
+  if (db.update(sql_update) == false) {
+    LOG(ERROR) << "update bills failure: " << sql_update;
+  }
+  // sql_insert = Strings::Format("INSERT INFO `bills` (`last_pay_time`,`puid`,`paid`,`owed`)");
+}
+
+void Server::settleAccounts(){
+  if (payOutQueue_){
+    std::list<payoutElement> payOutList;
+    {
+      ScopeLock sl(connsLock_);
+      payOutList = payOutQueue_;
+      payOutQueue_.clear();
+    }
+    for(auto itr = payOutList.begin(), itr != payOutList.end(); ++itr){
+      if(sendMoney(itr->userId_, itr->wage_)){
+        updateBills(itr->userId_, itr->wage_, false);
+        payOutList.erase(itr);
+      }
+    }
+  }
+}
+
+void Server::sendMoney(std::string userId, uint64_t wage){
+  string request = Strings::Format("{\"jsonrpc\":\"1.0\",\"id\":\"1\",\"method\":\"sendtoaddress\",\"params\":[{\"%s\" : [\"%d\"]}]}\n", userId, wage);
+  bool res = bitcoindRpcCall(btcnanodRpcAddr_.c_str(), btcnanodRpcUserpass_.c_str(),
+                             request.c_str(), response);
+  if (!res) {
+    LOG(ERROR) << "btcnanod rpc failure";
+    return false;
+  }
+  return true;
+}
+
 void Server::addConnection(evutil_socket_t fd, StratumSession *connection) {
   ScopeLock sl(connsLock_);
   connections_.insert(std::pair<evutil_socket_t, StratumSession *>(fd, connection));
@@ -1040,7 +1154,7 @@ int Server::checkShare(const Share &share,
   if (nTime > sjob->nTime_ + 600) { 
     return StratumError::TIME_TOO_NEW;
   }
-  DLOG(INFO) << "std::to_string(sjob->nVersion_): " << std::to_string(sjob->nVersion_);
+
   CBlockHeader header;
   std::vector<char> coinbaseBin;
   exJobPtr->generateBlockHeader(&header, &coinbaseBin,
@@ -1063,12 +1177,7 @@ int Server::checkShare(const Share &share,
   DLOG(INFO) << "nTime:    " << std::to_string(nTime);
   DLOG(INFO) << "nBits:    " << std::to_string(sjob->nBits_);
   DLOG(INFO) << "blkHash.ToString()= " << blkHash.ToString();
-  /*
-  uint8_t nSolutionBuffer[1344] = {0};
-  for( int i=0; i<1344; ++i){
-    nSolutionBuffer[i] = nSolution[i];
-  }
-  */
+
   arith_uint256 bnBlockHash     = UintToArith256(blkHash);
   arith_uint256 bnNetworkTarget = UintToArith256(sjob->networkTarget_);
   //
@@ -1094,8 +1203,7 @@ int Server::checkShare(const Share &share,
     snprintf(foundBlock.workerFullName_, sizeof(foundBlock.workerFullName_),
              "%s", workFullName.c_str());
     // send
-    DLOG(INFO) << "coinbase1_: " << sjob->coinbase1_;
-    sendSolvedShare2Kafka(&foundBlock, coinbaseBin);
+    sendSolvedShare2Kafka(&foundBlock, coinbaseBin);    
 
     // mark jobs as stale
     jobRepository_->markAllJobsAsStale();
@@ -1163,6 +1271,8 @@ int Server::checkShare(const Share &share,
   << jobTarget.ToString() << ", networkTarget: " << sjob->networkTarget_.ToString();
 
   // reach here means an valid share
+  // keep miner accounts before return, duo to new block be found
+  updateAccounts();
   return StratumError::NO_ERROR;
 }
 

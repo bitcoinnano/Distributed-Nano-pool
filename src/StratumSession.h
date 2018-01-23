@@ -249,6 +249,7 @@ private:
   void handleExMessage_SubmitShare        (const string *exMessage);
   void handleExMessage_SubmitShareWithTime(const string *exMessage);
   string allocExtraNonce();
+  void settleAccount();
 
 public:
   struct bufferevent* bev_;
@@ -284,6 +285,7 @@ public:
                             DiffController *sessionDiffController);
   uint32_t getSessionId() const;
   void sendSetTarget(const uint256& target);
+  void payment();
 };
 
 

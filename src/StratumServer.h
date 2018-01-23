@@ -231,6 +231,17 @@ class Server {
   std::map<evutil_socket_t, StratumSession *> connections_;
   mutex connsLock_;
 
+  MysqlConnectInfo poolDB_;
+
+  struct payoutElement{
+    std::string userId_;
+    int64_t wage_;
+    payoutElement(){}
+    payoutElement(const std::string userId, const int64_t wage): userId_(userId), wage_(wage){}
+  };
+  
+  std::list<payoutElement> payOutQueue_;
+
   // kafka producers
   KafkaProducer *kafkaProducerShareLog_;
   KafkaProducer *kafkaProducerSolvedShare_;
@@ -258,7 +269,7 @@ public:
   UserInfo *userInfo_;
 
 public:
-  Server(const int32_t shareAvgSeconds);
+  Server(const int32_t shareAvgSeconds, , const MysqlConnectInfo &poolDB);
   ~Server();
 
   bool setup(const char *ip, const unsigned short port, const char *kafkaBrokers,
@@ -289,6 +300,10 @@ public:
   void sendSolvedShare2Kafka(const FoundBlock *foundBlock,
                              const std::vector<char> &coinbaseBin);
   void sendCommonEvents2Kafka(const string &message);
+
+  bool keepAccounts(const std::string& userId, const uint64_t& wage);
+  void settleAccounts();
+  void updateBills(const std::string& userId, const uint64_t& wage, bool isKeepAccount=true );
 };
 
 
@@ -306,7 +321,6 @@ class StratumServer {
   string kafkaBrokers_;
   string userAPIUrl_;
 
-
   // if enable simulator, all share will be accepted
   bool isEnableSimulator_;
 
@@ -320,7 +334,8 @@ public:
                 const uint8_t serverId, const string &fileLastNotifyTime,
                 bool isEnableSimulator,
                 bool isSubmitInvalidBlock,
-                const int32_t shareAvgSeconds);
+                const int32_t shareAvgSeconds,
+                const MysqlConnectInfo &poolDB);
   ~StratumServer();
 
   bool init();

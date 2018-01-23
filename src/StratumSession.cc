@@ -801,7 +801,6 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 */
   // calc jobTarget
   uint256 jobTarget;
-
   // DiffToTarget(share.share_, jobTarget, false);
   BitsToTarget(localJob->blkBits_,jobTarget);
 
@@ -818,7 +817,7 @@ void StratumSession::handleRequest_Submit(const string &idStr,
       responseError(idStr, StratumError::DUPLICATE_SHARE);
 
     // add invalid share to counter
-    invalidSharesCounter_.insert((int64_t)time(nullptr), 1);
+     invalidSharesCounter_.insert((int64_t)time(nullptr), 1); 
     goto finish;
   }
 
@@ -831,7 +830,8 @@ void StratumSession::handleRequest_Submit(const string &idStr,
 
     // reserve the share
     localJob->addLocalShare(localShare);
-
+    
+    //we assume the share represent a new block, and already keep accounts when check share,
     // accepted share
     share.result_ = Share::Result::ACCEPT;
 
@@ -1098,6 +1098,10 @@ uint32_t StratumSession::getSessionId() const {
   return strtoul(extraNonce_.c_str(),nullptr,16);
 }
 
+void settleAccount(){
+
+}
+
 
 ///////////////////////////////// AgentSessions ////////////////////////////////
 AgentSessions::AgentSessions(const int32_t shareAvgSeconds,
@@ -1343,3 +1347,4 @@ void AgentSessions::getSetDiffCommand(map<uint8_t, vector<uint16_t> > &diffSessi
     } /* /while */
   } /* /for */
 }
+

@@ -664,6 +664,8 @@ void BlockMaker::_submitBlockThread(const string &rpcAddress,
     // success
     if (res == true) {
       LOG(INFO) << "rpc call success, submit block response: " << response;
+      /* we should settle accounts here, correct but complicate
+         settleAccounts(); */
       break;
     }
 
