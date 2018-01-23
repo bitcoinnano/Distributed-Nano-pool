@@ -957,10 +957,11 @@ void Server::doAccounts(){
       itr = connections_.erase(itr);
     } else {
       totleShares += conn->localJobs_->submitShares_.size();
-      keepAccounts(conn->worker_->userName_,);
+      
       ++itr;
     }
   }
+  keepAccounts(conn->worker_->userName_,);
 }
 
 void Server::keepAccounts(const std::string& userId, const uint64_t& wage){

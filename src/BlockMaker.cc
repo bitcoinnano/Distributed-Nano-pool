@@ -487,7 +487,7 @@ void BlockMaker::consumeSovledShare(rd_kafka_message_t *rkmessage) {
   LOG(INFO) << "received SolvedShare message, len: " << rkmessage->len;
 
   //
-  // solved share message:  FoundBlock + coinbase_Tx
+  // solved share message:  FoundBlock + coinbaseTx
   //
   FoundBlock foundBlock;
   CBlockHeader blkHeader;

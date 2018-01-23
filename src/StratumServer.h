@@ -237,7 +237,7 @@ class Server {
     std::string userId_;
     int64_t wage_;
     payoutElement(){}
-    payoutElement(const std::string userId, const int64_t wage): userId_(userId), wage_(wage){}
+    payoutElement(const std::string& userId, const int64_t& wage): userId_(userId), wage_(wage){}
   };
   
   std::list<payoutElement> payOutQueue_;

@@ -74,6 +74,7 @@ void DiffController::addAcceptedShare(const uint64 share) {
 // 7 :  256 ~  512 T,  4.0
 // 8 :  512 ~  ... T,  6.0
 //
+//
 
 static int __hashRateDown(int level) {
   const int levels[] = {0, 4, 8, 16,   32, 64, 128, 256};
@@ -829,9 +830,10 @@ void StratumSession::handleRequest_Submit(const string &idStr,
   if (submitResult == StratumError::NO_ERROR) {
 
     // reserve the share
+    //nano assume the share represent a new block, and already keep accounts when check share
     localJob->addLocalShare(localShare);
     
-    //we assume the share represent a new block, and already keep accounts when check share,
+
     // accepted share
     share.result_ = Share::Result::ACCEPT;
 

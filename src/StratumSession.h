@@ -169,7 +169,7 @@ public:
     uint64_t jobDifficulty_;     // difficulty of this job
     uint32_t blkBits_;
     uint8_t  shortJobId_;
-    std::set<LocalShare> submitShares_;
+    std::set<LocalShare> submitShares_;  // use to compute shares ratio
     std::vector<uint8_t> agentSessionsDiff2Exp_;
 
     LocalJob(): jobId_(0), jobDifficulty_(0), blkBits_(0), shortJobId_(0) {}
